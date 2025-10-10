@@ -10,6 +10,8 @@ import Events from "./pages/Events";
 import AddEvents from "./pages/AddEvents";
 import Post from "./pages/Post";
 import MentorProfile from "./pages/MentorProfile";
+import Apply from "./pages/Apply";
+import ConnectionProfile from "./pages/ConnectionProfile";
 // import Feed from "./pages/Feed";
 
 function App() {
@@ -25,11 +27,12 @@ function App() {
         <Route path="/events" element={<Events />} />
         <Route path="/addEvents" element={<AddEvents />} />
         <Route path="/post" element={<Post />} />
-        <Route path="/mentor/:name" element={<MentorProfile />} />
-        {/* <Route path="/feed" element={<Feed />} /> */}
+        <Route path="/mentor/:id" element={<MentorProfile />} />
+        <Route path="/apply/:jobId" element={<Apply />} />
+        <Route path="/connectionProfile/:id" element={<ConnectionProfile />} />
       </Routes>
     </div>
-      
+
   );
 }
 
