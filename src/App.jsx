@@ -12,6 +12,8 @@ import Post from "./pages/Post";
 import MentorProfile from "./pages/MentorProfile";
 import Apply from "./pages/Apply";
 import ConnectionProfile from "./pages/ConnectionProfile";
+import Map from "./pages/Map";
+import Messages from "./pages/Messages";
 // import Feed from "./pages/Feed";
 
 function App() {
@@ -30,6 +32,8 @@ function App() {
         <Route path="/mentor/:id" element={<MentorProfile />} />
         <Route path="/apply/:jobId" element={<Apply />} />
         <Route path="/connectionProfile/:id" element={<ConnectionProfile />} />
+        <Route path="/map" element={<Map />} />
+        <Route path="/messages" element={<Messages />} />
       </Routes>
     </div>
 
