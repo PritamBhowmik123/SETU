@@ -8,6 +8,7 @@ import eventRoutes from './routes/eventRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import pool from './config/database.js';
+import { patchEventsTable } from "./config/patchEventsTable.js";
 
 // Load environment variables
 dotenv.config();
@@ -67,22 +68,31 @@ app.use('/api/jobs', jobRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`
+// ---- Start server after DB patch ----
+const startServer = async () => {
+  try {
+    await patchEventsTable();
+
+    app.listen(PORT, () => {
+      console.log(`
 ╔════════════════════════════════════════╗
 ║   🚀 SETU Server Running               ║
-║   📡 Port: ${PORT}                        ║
-║   🌍 Environment: ${process.env.NODE_ENV || 'development'}       ║
-║   🔗 URL: http://localhost:${PORT}       ║
+║   📡 Port: ${PORT}                     
+║   🌍 Environment: ${process.env.NODE_ENV || 'development'}       
+║   🔗 URL: http://localhost:${PORT}     
 ╚════════════════════════════════════════╝
-  `);
-});
+      `);
+    });
+
+  } catch {
+    process.exit(1);
+  }
+};
+
+startServer();
 
 // Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Rejection:', err);
-  // Close server & exit process
+process.on('unhandledRejection', () => {
   process.exit(1);
 });
 

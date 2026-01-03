@@ -115,16 +115,17 @@ const initJobsDatabase = async () => {
 };
 
 // Run if executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  initJobsDatabase()
-    .then(() => {
-      console.log('✅ Database setup complete');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('❌ Database setup failed:', error);
-      process.exit(1);
-    });
-}
+console.log("🚀 Running Jobs DB Init Script...");
+
+initJobsDatabase()
+  .then(() => {
+    console.log("✅ Jobs database setup complete");
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error("❌ Jobs database setup failed:", error);
+    process.exit(1);
+  });
+
 
 export default initJobsDatabase;
