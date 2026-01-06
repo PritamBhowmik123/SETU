@@ -5,21 +5,35 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// PostgreSQL connection pool
+// Detect if SSL is required (Neon) — fallback to local
+const useSSL = process.env.DB_SSL === 'true' || process.env.DB_SSL_MODE === 'require';
+
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
   database: process.env.DB_NAME || 'setu_db',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
+
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000,
+
+  // Enable SSL only when needed (Neon)
+  ssl: useSSL
+    ? {
+        rejectUnauthorized: false,   // Required for Neon
+      }
+    : false,
 });
 
-// Test database connection
+// Log connection result
 pool.on('connect', () => {
-  console.log('✅ Connected to PostgreSQL database');
+  console.log(
+    `✅ Connected to PostgreSQL database ${
+      useSSL ? '(Neon + SSL)' : '(Local)'
+    }`
+  );
 });
 
 pool.on('error', (err) => {
@@ -27,7 +41,7 @@ pool.on('error', (err) => {
   process.exit(-1);
 });
 
-// Helper function to execute queries
+// Query helper
 export const query = async (text, params) => {
   const start = Date.now();
   try {
@@ -41,7 +55,6 @@ export const query = async (text, params) => {
   }
 };
 
-// Get a client from the pool
 export const getClient = () => pool.connect();
 
 export default pool;
