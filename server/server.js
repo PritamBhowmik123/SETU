@@ -6,8 +6,12 @@ import cookieParser from 'cookie-parser';
 import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
+import jobRoutes from './routes/jobRoutes.js';
+import postRoutes from './routes/postRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import pool from './config/database.js';
+import { patchEventsTable } from "./config/patchEventsTable.js";
+import { initPostsDatabase } from './config/initPostsDatabase.js';
 
 // Load environment variables
 dotenv.config();
@@ -50,6 +54,8 @@ app.get('/', (req, res) => {
       auth: '/api/auth',
       admin: '/api/admin',
       events: '/api/events',
+      jobs: '/api/jobs',
+      posts: '/api/posts',
     },
   });
 });
@@ -67,27 +73,39 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use("/api/ai", aiRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/jobs', jobRoutes);
+app.use('/api/posts', postRoutes);
 
 // Error handling middleware (must be last)
 app.use(notFound);
 app.use(errorHandler);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`
+// ---- Start server after DB patch ----
+const startServer = async () => {
+  try {
+    await patchEventsTable();
+    await initPostsDatabase();
+
+    app.listen(PORT, () => {
+      console.log(`
 ╔════════════════════════════════════════╗
 ║   🚀 SETU Server Running               ║
-║   📡 Port: ${PORT}                        ║
-║   🌍 Environment: ${process.env.NODE_ENV || 'development'}       ║
-║   🔗 URL: http://localhost:${PORT}       ║
+║   📡 Port: ${PORT}                     
+║   🌍 Environment: ${process.env.NODE_ENV || 'development'}       
+║   🔗 URL: http://localhost:${PORT}     
 ╚════════════════════════════════════════╝
-  `);
-});
+      `);
+    });
+
+  } catch {
+    process.exit(1);
+  }
+};
+
+startServer();
 
 // Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Rejection:', err);
-  // Close server & exit process
+process.on('unhandledRejection', () => {
   process.exit(1);
 });
 
