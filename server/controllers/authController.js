@@ -1,7 +1,7 @@
 import pool from '../config/database.js';
 import { hashPassword, comparePassword, sanitizeUser, isValidEmail, isStrongPassword } from '../utils/helpers.js';
 import { generateToken, generateRefreshToken } from '../utils/jwt.js';
-import { uploadDocumentToCloudinary } from '../config/cloudinary.js';
+import { uploadDocumentToCloudinary, uploadToCloudinary } from '../config/cloudinary.js';
 
 // Register a new user (student or alumni)
 export const register = async (req, res, next) => {
@@ -323,7 +323,12 @@ export const getProfile = async (req, res, next) => {
       },
     });
   } catch (error) {
-    next(error);
+    console.error('❌ Get profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch profile.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
   }
 };
 
@@ -331,6 +336,14 @@ export const getProfile = async (req, res, next) => {
 export const updateProfile = async (req, res, next) => {
   try {
     const userId = req.user.id;
+
+    // Log incoming request for debugging
+    console.log('📝 Profile update request:', {
+      userId,
+      body: req.body,
+      bodyKeys: Object.keys(req.body),
+    });
+
     const {
       name,
       college,
@@ -341,11 +354,17 @@ export const updateProfile = async (req, res, next) => {
       profile_image,
       linkedin_url,
       github_url,
+      facebook_url,
       current_company,
       current_position,
       location,
       skills,
       interests,
+      pronouns,
+      degree,
+      experience,
+      education,
+      projects,
     } = req.body;
 
     // Build dynamic update query
@@ -353,61 +372,85 @@ export const updateProfile = async (req, res, next) => {
     const values = [];
     let paramCount = 1;
 
-    if (name) {
+    if (name !== undefined) {
       updates.push(`name = $${paramCount++}`);
       values.push(name);
     }
-    if (college) {
+    if (college !== undefined) {
       updates.push(`college = $${paramCount++}`);
       values.push(college);
     }
-    if (batch_year) {
+    if (batch_year !== undefined) {
       updates.push(`batch_year = $${paramCount++}`);
       values.push(batch_year);
     }
-    if (department) {
+    if (department !== undefined) {
       updates.push(`department = $${paramCount++}`);
       values.push(department);
     }
-    if (phone) {
+    if (phone !== undefined) {
       updates.push(`phone = $${paramCount++}`);
       values.push(phone);
     }
-    if (bio) {
+    if (bio !== undefined) {
       updates.push(`bio = $${paramCount++}`);
       values.push(bio);
     }
-    if (profile_image) {
+    if (profile_image !== undefined) {
       updates.push(`profile_image = $${paramCount++}`);
       values.push(profile_image);
     }
-    if (linkedin_url) {
+    if (linkedin_url !== undefined) {
       updates.push(`linkedin_url = $${paramCount++}`);
       values.push(linkedin_url);
     }
-    if (github_url) {
+    if (github_url !== undefined) {
       updates.push(`github_url = $${paramCount++}`);
       values.push(github_url);
     }
-    if (current_company) {
+    if (facebook_url !== undefined) {
+      updates.push(`facebook_url = $${paramCount++}`);
+      values.push(facebook_url);
+    }
+    if (current_company !== undefined) {
       updates.push(`current_company = $${paramCount++}`);
       values.push(current_company);
     }
-    if (current_position) {
+    if (current_position !== undefined) {
       updates.push(`current_position = $${paramCount++}`);
       values.push(current_position);
     }
-    if (location) {
+    if (location !== undefined) {
       updates.push(`location = $${paramCount++}`);
       values.push(location);
     }
-    if (skills) {
+    if (skills !== undefined) {
       updates.push(`skills = $${paramCount++}`);
       values.push(skills);
     }
-    if (interests) {
+    if (interests !== undefined) {
       updates.push(`interests = $${paramCount++}`);
       values.push(interests);
+    }
+    if (pronouns !== undefined) {
+      updates.push(`pronouns = $${paramCount++}`);
+      values.push(pronouns);
+    }
+    if (degree !== undefined) {
+      updates.push(`degree = $${paramCount++}`);
+      values.push(degree);
+    }
+    if (experience !== undefined) {
+      updates.push(`experience = $${paramCount++}`);
+      values.push(experience);
+    }
+    if (education !== undefined) {
+      updates.push(`education = $${paramCount++}`);
+      values.push(education);
+    }
+    if (projects !== undefined) {
+      updates.push(`projects = $${paramCount++}`);
+      values.push(projects);
     }
 
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
@@ -439,6 +482,81 @@ export const updateProfile = async (req, res, next) => {
       },
     });
   } catch (error) {
-    next(error);
+    console.error('❌ Profile update error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      userId: req.user?.id,
+    });
+
+    res.status(500).json({
+      success: false,
+      message: 'Profile update failed. Please try again.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
   }
 };
+
+// Upload profile picture
+export const uploadProfilePicture = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    console.log('📸 Profile picture upload request:', {
+      userId,
+      hasFile: !!req.file,
+      fileDetails: req.file ? {
+        fieldname: req.file.fieldname,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+      } : null,
+    });
+
+    if (!req.file) {
+      console.error('❌ No file in request');
+      return res.status(400).json({
+        success: false,
+        message: 'No image file provided.',
+      });
+    }
+
+    console.log('☁️ Uploading to Cloudinary...');
+    // Upload to Cloudinary
+    const imageUrl = await uploadToCloudinary(req.file.buffer, 'setu/profile_pictures');
+    console.log('✅ Cloudinary upload successful:', imageUrl);
+
+    // Update user's profile_image in database
+    console.log('💾 Updating database...');
+    const result = await pool.query(
+      'UPDATE users SET profile_image = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+      [imageUrl, userId]
+    );
+
+    const user = sanitizeUser(result.rows[0]);
+    console.log('✅ Profile picture updated successfully');
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile picture uploaded successfully!',
+      data: {
+        user,
+        profile_image: imageUrl,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Profile picture upload error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      userId: req.user?.id,
+    });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload profile picture. Please try again.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
