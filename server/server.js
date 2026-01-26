@@ -10,12 +10,14 @@ import eventRoutes from './routes/eventRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
 import postRoutes from './routes/postRoutes.js';
 import connectionRoutes from './routes/connectionRoutes.js';
+import donationRoutes from './routes/donationRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import pool from './config/database.js';
 import { patchEventsTable } from "./config/patchEventsTable.js";
 import { initPostsDatabase } from './config/initPostsDatabase.js';
 import { initStudentsDatabase } from './config/initStudentsDatabase.js';
 import { initConnectionsDatabase } from './config/initConnectionsDatabase.js';
+import { initDonationsDatabase } from './config/initDonationsDatabase.js';
 
 // Load environment variables
 dotenv.config();
@@ -35,6 +37,9 @@ app.use(
     exposedHeaders: ['Content-Disposition'], // Allow frontend to read Content-Disposition header
   })
 );
+
+// Webhook route MUST come before express.json() to receive raw body
+app.use('/api/donations/webhook', express.raw({ type: 'application/json' }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -83,6 +88,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/connections', connectionRoutes);
+app.use('/api/donations', donationRoutes);
 
 // Error handling middleware (must be last)
 app.use(notFound);
@@ -94,6 +100,7 @@ const startServer = async () => {
     await patchEventsTable();
     await initPostsDatabase();
     await initStudentsDatabase();
+    await initDonationsDatabase();
     await initConnectionsDatabase();
 
     app.listen(PORT, () => {

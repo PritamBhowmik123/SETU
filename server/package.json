@@ -17,6 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@stripe/stripe-js": "^8.6.4",
     "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.8.0",
@@ -30,7 +31,8 @@
     "multer": "^2.0.2",
     "pdfkit": "^0.17.2",
     "pg": "^8.11.3",
-    "resend": "^6.8.0"
+    "resend": "^6.8.0",
+    "stripe": "^20.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
