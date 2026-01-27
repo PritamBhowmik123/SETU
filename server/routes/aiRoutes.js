@@ -1,10 +1,10 @@
 import express from "express";
-import { authenticate, isStudent } from "../middleware/auth.js";
-
 import { recommendMentors } from "../controllers/ai_controller.js";
+import { authenticate } from "../middleware/auth.js";
 
 const router = express.Router();
 
-router.get("/mentor-recommend", authenticate, isStudent, recommendMentors);
+// ✅ ONLY authenticate, NO role restriction
+router.get("/mentor-recommend", authenticate, recommendMentors);
 
 export default router;

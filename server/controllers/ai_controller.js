@@ -3,37 +3,47 @@ import axios from "axios";
 
 export const recommendMentors = async (req, res) => {
   try {
-    // 🔐 Auth check (must be INSIDE function)
     if (!req.user) {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    const studentId = req.user.id;
+    const { id: userId, role } = req.user;
 
-    // 1️⃣ Fetch student skills
-    const studentResult = await pool.query(
-      "SELECT skills FROM users WHERE id = $1 AND role = 'student'",
-      [studentId]
+    // 1️⃣ Fetch user skills
+    const userResult = await pool.query(
+      "SELECT skills FROM users WHERE id = $1",
+      [userId]
     );
 
-    if (studentResult.rows.length === 0) {
-      return res.status(404).json({ message: "Student not found" });
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
     }
 
-    // ✅ Parse student skills correctly
-    const studentSkillsArray =
-      typeof studentResult.rows[0].skills === "string"
-        ? JSON.parse(studentResult.rows[0].skills)
-        : studentResult.rows[0].skills || [];
+    const userSkillsArray =
+      typeof userResult.rows[0].skills === "string"
+        ? JSON.parse(userResult.rows[0].skills)
+        : userResult.rows[0].skills || [];
 
-    const studentSkills = studentSkillsArray.join(" ");
-    console.log("Student skills:", studentSkills);
+    const userSkills = userSkillsArray.join(" ");
+    console.log("User skills:", userSkills);
 
-    // 2️⃣ Fetch alumni mentors (NO available column)
+    // 2️⃣ Decide recommendation type
+    let recommendationRole;
+
+    if (role === "student") {
+      recommendationRole = "alumni";
+    } else if (role === "alumni") {
+      recommendationRole = "alumni";
+    } else {
+      return res.status(403).json({ message: "Invalid role" });
+    }
+
+    // 3️⃣ Fetch mentors (exclude self)
     const mentorResult = await pool.query(
       `SELECT id, name, email, skills, experience
        FROM users
-       WHERE role = 'alumni'`
+       WHERE role = $1 AND id != $2`,
+      [recommendationRole, userId]
     );
 
     const mentors = mentorResult.rows.map((m) => ({
@@ -47,11 +57,11 @@ export const recommendMentors = async (req, res) => {
 
     console.log("Mentors sent to AI:", mentors.length);
 
-    // 3️⃣ Call Python AI
+    // 4️⃣ Call AI
     const aiResponse = await axios.post(
       "http://127.0.0.1:8000/mentor-recommend",
       {
-        student_skills: studentSkills,
+        student_skills: userSkills,
         mentors,
       }
     );
