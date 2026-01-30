@@ -123,6 +123,7 @@ export const getConnections = async (req, res) => {
         END as mentor_name,
         u.skills as mentor_skill,
         u.profile_image as mentor_avatar,
+        u.role as mentor_role,
         mc.match_score,
         mc.mentor_identifier,
         mc.created_at
