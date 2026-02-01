@@ -16,11 +16,150 @@ const performOCR = async (imageSource) => {
 };
 
 /**
+ * Detect document type from OCR text
+ * @param {string} text - Raw OCR text
+ * @returns {string} - 'PROVISIONAL_CERT' or 'ID_CARD'
+ */
+const detectDocumentType = (text) => {
+    const lowerText = text.toLowerCase();
+    if (lowerText.includes('provisional certificate') ||
+        lowerText.includes('provisional cert')) {
+        return 'PROVISIONAL_CERT';
+    }
+    return 'ID_CARD';
+};
+
+/**
+ * Extract fields from provisional certificate (Alumni only)
+ * @param {string} text - Raw OCR text
+ * @returns {object} - Extracted fields
+ */
+const extractFromProvisionalCert = (text) => {
+    console.log('[DEBUG] Full OCR text for provisional cert:');
+    console.log(text);
+    console.log('[DEBUG] Text length:', text.length);
+
+    const extracted = {
+        full_name: '',
+        roll_number: '',
+        college_id: '',
+        college_name: '',
+        department: '',
+        passing_year: '',
+        registration_number: ''
+    };
+
+    // Extract Name: Look for "certify that [NAME]"
+    let nameMatch = text.match(/(?:certify that|that)\s+([A-Z][A-Z\s]+?)\s*\(/i);
+    if (nameMatch) {
+        extracted.full_name = nameMatch[1].trim();
+    }
+
+    // Extract Roll Number: Handle OCR errors like "RolIN0" instead of "RollNo"
+    // OCR often confuses: l/I, l/1, o/0, O/0
+    let rollMatch = text.match(/Ro[l1I][l1I]?[Nn]?[o0O]?\s*:?\s*([0-9]{8,15})/i);
+    if (!rollMatch) {
+        // Try finding pattern in parentheses: "(RolIN0:16931121009"
+        rollMatch = text.match(/\([Rr]o[l1I][l1I]?[Nn]?[o0O]?\s*:?\s*([0-9]{8,15})/i);
+    }
+    if (!rollMatch) {
+        // Last resort: look for long number after opening parenthesis
+        rollMatch = text.match(/\([^0-9]*([0-9]{10,12})/);
+    }
+    if (rollMatch) {
+        extracted.roll_number = rollMatch[1].trim();
+        console.log('[DEBUG] Found roll number:', extracted.roll_number);
+    }
+
+    // Extract Registration Number: Handle OCR errors and line breaks
+    // OCR often splits "Reg No:" across lines as "Reg" and "No0:" (with zero)
+    let regMatch = text.match(/[Rr]eg\s*[Nn]?[o0O]?\s*:?\s*([0-9]{10,15})/i);
+    if (!regMatch) {
+        // Handle line break: "Reg\nNo0:211690100110192"
+        regMatch = text.match(/[Rr]eg[\s\n]+[Nn][o0O][o0O]?\s*:?\s*([0-9]{10,15})/i);
+    }
+    if (!regMatch) {
+        // More flexible: just look for "of 2021-22)" followed by space and long number
+        regMatch = text.match(/of\s+\d{4}-\d{2}\)[^0-9]*([0-9]{14,15})/);
+    }
+    if (regMatch) {
+        extracted.registration_number = regMatch[1].trim();
+        console.log('[DEBUG] Found registration number:', extracted.registration_number);
+    }
+
+    // Extract College Name from certificate text
+    // Pattern: "of 2021-23) [COLLEGE NAME], has successfully"
+    let collegeName = '';
+    const collegeMatch = text.match(/of\s+\d{4}-\d{2}\)\s+([A-Z][A-Z\s&]+?),\s+has\s+successfully/i);
+    if (collegeMatch) {
+        collegeName = collegeMatch[1].trim().toUpperCase();
+        console.log('[DEBUG] Raw college name extracted:', collegeName);
+
+        // STRICT: Only normalize OCR variations of Academy of Technology itself
+        // Do NOT normalize different colleges like "ABC INSTITUTE" 
+        if (collegeName === 'ACADEMY OF TECHNOLOGY' ||
+            (collegeName.includes('ACADEMY') && collegeName.includes('TECHNOLOGY'))) {
+            extracted.college_name = 'Academy of Technology';
+        } else {
+            // Different college - keep as-is (title case)
+            extracted.college_name = collegeName
+                .toLowerCase()
+                .replace(/(?:^|\s)\S/g, a => a.toUpperCase());
+            console.log('[WARNING] Different college detected:', extracted.college_name);
+        }
+    } else {
+        // Fallback: try to find in text
+        if (text.toLowerCase().includes('academy of technology')) {
+            extracted.college_name = 'Academy of Technology';
+        } else {
+            extracted.college_name = '';
+            console.log('[WARNING] Could not extract college name');
+        }
+    }
+
+    console.log('[DEBUG] Final college name:', extracted.college_name);
+
+    // Extract Department
+    const deptMatch = text.match(/(?:in|Technology in)\s+([A-Za-z\s&]+?)\s+degree/i);
+    if (deptMatch) {
+        extracted.department = deptMatch[1].trim();
+    }
+
+    // Extract Passing Year: Look for completion year pattern
+    const yearMatch = text.match(/in\s+(202\d)-(\d{2})/i);
+    if (yearMatch) {
+        // Format: "in 2024-25" means passing year is 2025
+        const firstYear = parseInt(yearMatch[1]);
+        extracted.passing_year = firstYear + 1;
+    }
+
+    // Normalize name to title case
+    if (extracted.full_name) {
+        extracted.full_name = extracted.full_name.toLowerCase().replace(/(?:^|\s)\S/g, a => a.toUpperCase());
+    }
+
+    console.log('[DEBUG] Extraction Results:');
+    console.log('  - Roll Number:', extracted.roll_number);
+    console.log('  - Registration Number:', extracted.registration_number);
+
+    return extracted;
+};
+
+/**
  * Parse OCR text to extract fields
  * @param {string} text - Raw OCR text
  * @param {string} userType - 'student' or 'alumni'
  */
 const extractFields = (text, userType) => {
+    // NEW: Detect document type and route to appropriate extractor
+    const docType = detectDocumentType(text);
+    if (docType === 'PROVISIONAL_CERT') {
+        console.log('[EXTRACTION] Detected: Provisional Certificate');
+        return extractFromProvisionalCert(text);
+    }
+
+    // EXISTING: ID Card extraction (unchanged)
+    console.log('[EXTRACTION] Detected: ID Card');
     const normalizedText = text.replace(/\s+/g, ' ').trim();
 
     // Basic regex patterns (can be improved based on actual ID card format)
@@ -163,11 +302,26 @@ const matchWithMasterDB = async (extractedData, userType) => {
     }
 
     // Check Roll Number match OR College ID match
-    let query = `SELECT * FROM ${table} WHERE college_name = $1 AND (roll_number = $2 OR college_id = $3)`;
+    // NEW: For alumni, also check Registration Number
+    let query, params;
 
-    const roll = extractedData.roll_number || 'UNKNOWN_ROLL';
-    const colId = extractedData.college_id || 'UNKNOWN_COL_ID';
-    const params = [extractedData.college_name, roll, colId];
+    if (userType === 'alumni' && extractedData.registration_number) {
+        // Alumni: check roll_number OR college_id OR registration_number
+        // NEW: Use ILIKE for case-insensitive college name matching
+        query = `SELECT * FROM ${table} WHERE LOWER(college_name) = LOWER($1) AND (roll_number = $2 OR college_id = $3 OR registration_number = $4)`;
+        const roll = extractedData.roll_number || 'UNKNOWN_ROLL';
+        const colId = extractedData.college_id || 'UNKNOWN_COL_ID';
+        const regNum = extractedData.registration_number;
+        params = [extractedData.college_name, roll, colId, regNum];
+        console.log('[DEBUG] Alumni query with registration_number:', { college: extractedData.college_name, roll, regNum });
+    } else {
+        // EXISTING: Students or alumni without registration number
+        // NEW: Also use case-insensitive matching for consistency
+        query = `SELECT * FROM ${table} WHERE LOWER(college_name) = LOWER($1) AND (roll_number = $2 OR college_id = $3)`;
+        const roll = extractedData.roll_number || 'UNKNOWN_ROLL';
+        const colId = extractedData.college_id || 'UNKNOWN_COL_ID';
+        params = [extractedData.college_name, roll, colId];
+    }
 
     const result = await pool.query(query, params);
 

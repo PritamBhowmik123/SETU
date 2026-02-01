@@ -41,13 +41,15 @@ export const initVerificationDatabase = async () => {
         college_name VARCHAR(255) NOT NULL,
         department VARCHAR(100),
         passing_year INTEGER NOT NULL,
+        registration_number VARCHAR(50),
+        degree VARCHAR(100),
+        university_name VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('✅ college_alumni_master table created');
 
     // 4. Seeding Dummy Data for Testing (Idempotent insert)
-    // Duplicate check before insert
     await client.query(`
       INSERT INTO college_students_master (full_name, roll_number, college_id, college_name, department)
       VALUES 
@@ -58,10 +60,11 @@ export const initVerificationDatabase = async () => {
     `);
 
     await client.query(`
-      INSERT INTO college_alumni_master (full_name, roll_number, college_id, college_name, department, passing_year)
+      INSERT INTO college_alumni_master (full_name, roll_number, college_id, college_name, department, passing_year, registration_number, degree, university_name)
       VALUES 
-        ('Amit Verma', 'A11223', 'AID999', 'Academy of Technology', 'Electronics', 2023),
-        ('Sneha Gupta', 'A44556', 'AID888', 'Academy of Technology', 'Computer Science', 2022)
+        ('Amit Verma', 'A11223', 'AID999', 'Academy of Technology', 'Electronics', 2023, NULL, NULL, NULL),
+        ('Sneha Gupta', 'A44556', 'AID888', 'Academy of Technology', 'Computer Science', 2022, NULL, NULL, NULL),
+        ('ARATRIK BANDYOPADHYAY', '16931121009', NULL, 'Academy of Technology', 'Computer Science & Engineering', 2025, '211690100110192', 'Bachelor of Technology', 'Maulana Abul Kalam Azad University of Technology, West Bengal')
       ON CONFLICT DO NOTHING;
     `);
     console.log('✅ Dummy master data seeded');
