@@ -466,12 +466,20 @@ const matchWithMasterDB = async (extractedData, userType) => {
     }
 
     // Alumni passing year check
+    // Alumni passing year check (production-safe)
     if (userType === 'alumni') {
-        // Loose comparison (String vs Number)
-        if (String(masterRecord.passing_year) !== String(extractedData.passing_year)) {
+        if (
+            extractedData.passing_year &&
+            masterRecord.passing_year &&
+            Math.abs(
+                Number(masterRecord.passing_year) -
+                Number(extractedData.passing_year)
+            ) > 1
+        ) {
             return { match: false, reason: 'Passing Year mismatch.' };
         }
     }
+
 
     return { match: true, reason: 'Verified successfully' };
 };
@@ -558,7 +566,8 @@ export const verifyDocument = async (userId, imageSource, userType) => {
         return { status: 'PENDING', reason: 'Database matching error', extractedData };
     }
 
-    const status = matchResult.match ? 'VERIFIED' : 'PENDING';
+    const status = matchResult.match ? 'VERIFIED' : 'FAILED';
+
     const reason = matchResult.reason;
 
     console.log(`Verification Result: ${status}. Reason: ${reason}`);
