@@ -8,82 +8,101 @@ export const register = async (req, res, next) => {
   try {
     const { name, email, password, role, college, batch_year, department } = req.body;
 
-    // Validate required fields
     if (!name || !email || !password || !role || !college) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide all required fields: name, email, password, role, and college.',
-      });
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    // Validate role
     if (role !== 'student' && role !== 'alumni') {
-      return res.status(400).json({
-        success: false,
-        message: 'Role must be either "student" or "alumni".',
-      });
+      return res.status(400).json({ success: false, message: 'Invalid role' });
     }
 
-    // Validate email
-    if (!isValidEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid email address.',
-      });
-    }
-
-    // Validate password
-    if (!isStrongPassword(password)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 6 characters long.',
-      });
-    }
-
-    // Check if user already exists
     const existingUser = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
+      'SELECT id FROM users WHERE email = $1',
       [email.toLowerCase()]
     );
 
     if (existingUser.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'A user with this email already exists.',
-      });
+      return res.status(400).json({ success: false, message: 'User already exists' });
     }
 
-    // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create new user
+    // 📌 OPTIONAL student document upload
+    let documentUrl = null;
+    if (req.file) {
+      documentUrl = await uploadDocumentToCloudinary(
+        req.file.buffer,
+        req.file.mimetype,
+        'setu/student_docs'
+      );
+    }
+
     const result = await pool.query(
-      `INSERT INTO users (name, email, password, role, college, batch_year, department)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO users 
+        (name, email, password, role, college, batch_year, department, verification_document)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING *`,
-      [name, email.toLowerCase(), hashedPassword, role, college, batch_year || null, department || null]
+      [
+        name,
+        email.toLowerCase(),
+        hashedPassword,
+        role,
+        college,
+        batch_year || null,
+        department || null,
+        documentUrl
+      ]
     );
 
     const user = result.rows[0];
 
-    // Generate token
+    // 🔥 STUDENT VERIFICATION (THIS WAS MISSING)
+    // ---- STUDENT VERIFICATION ----
+    let verificationResult = { status: 'PENDING', isVerified: false };
+
+    if (req.file) {
+      try {
+        console.log('🚀 Starting STUDENT verification:', user.id);
+
+        const documentUrl = await uploadDocumentToCloudinary(
+          req.file.buffer,
+          req.file.mimetype,
+          'setu/student_docs'
+        );
+
+        const { verifyDocument } = await import('./verificationController.js');
+
+        verificationResult = await verifyDocument(
+          user.id,
+          documentUrl,
+          'student'
+        );
+
+        console.log('✅ STUDENT verification result:', verificationResult);
+
+        user.verification_status = verificationResult.status;
+        user.is_verified = verificationResult.isVerified;
+      } catch (err) {
+        console.error('❌ STUDENT verification failed:', err);
+      }
+    }
+
+
     const token = generateToken({
       id: user.id,
       email: user.email,
       role: user.role,
     });
 
-    // Normalize user data to match app expectations
-    const userResponse = {
-      ...sanitizeUser(user),
-      user_id: user.id, // Normalize ID field
-    };
-
     res.status(201).json({
       success: true,
-      message: 'User registered successfully!',
+      message: 'User registered successfully',
       data: {
-        user: userResponse,
+        user: {
+          ...sanitizeUser(user),
+          verification_status: verificationResult.status,
+          is_verified: verificationResult.isVerified,
+        },
         token,
       },
     });
@@ -91,6 +110,7 @@ export const register = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // Alumni signup with document upload (separate from general register)
 export const alumniSignup = async (req, res, next) => {
@@ -185,18 +205,27 @@ export const alumniSignup = async (req, res, next) => {
 
     // --- START VERIFICATION PROCESS ---
     let verificationResult = { status: 'PENDING', isVerified: false };
-    if (documentUrl) {
-      try {
-        const { verifyDocument } = await import('./verificationController.js');
-        verificationResult = await verifyDocument(user.id, documentUrl, 'alumni');
 
-        // Update user object with fresh status
-        user.verification_status = verificationResult.status;
-        user.is_verified = verificationResult.isVerified;
-      } catch (verError) {
-        console.error('Alumni verification process failed:', verError);
+    try {
+      if (!documentUrl) {
+        console.warn('⚠️ No document URL, skipping OCR');
+      } else {
+        const { verifyDocument } = await import('./verificationController.js');
+
+        console.log('🚀 Starting verification for alumni:', user.id);
+
+        verificationResult = await verifyDocument(
+          user.id,
+          documentUrl,
+          'alumni'
+        );
+
+        console.log('✅ Verification result:', verificationResult);
       }
+    } catch (err) {
+      console.error('❌ Verification crashed:', err);
     }
+
     // ----------------------------------
 
     // Normalize user data to match app expectations
